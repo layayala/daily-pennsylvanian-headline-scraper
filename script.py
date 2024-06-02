@@ -5,17 +5,15 @@ JSON file that tracks headlines over time.
 
 import os
 import sys
-
-import daily_event_monitor
-
-import bs4
-import requests
+import json
+from datetime import datetime
 import loguru
+import requests
+import bs4
 
 def scrape_data_point():
     """
     Scrapes the top headline from the 'News' section on The Daily Pennsylvanian home page by first navigating to the 'News' subpage and then extracting the headline.
-
     Returns:
         str: The headline text if found, otherwise an empty string.
     """
@@ -41,12 +39,38 @@ def scrape_data_point():
     loguru.logger.info("Failed to locate the News link or headline")
     return ""
 
+def load_data(file_path):
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                return json.load(file)
+        else:
+            return {}
+    except json.JSONDecodeError:
+        return {}
 
-if __name__ == "__main__":
+def save_data(file_path, data):
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
 
-    # Setup logger to track runtime
+def main():
     loguru.logger.add("scrape.log", rotation="1 day")
 
+    data_file_path = 'data/daily_pennsylvanian_headlines.json'
+    current_data = load_data(data_file_path)
+
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    data_point = scrape_data_point()
+
+    if today_date in current_data:
+        current_data[today_date].append(data_point)
+    else:
+        current_data[today_date] = [data_point]
+
+    save_data(data_file_path, current_data)
+    loguru.logger.info(f"Scraped and saved: {data_point}")
+
+if __name__ == "__main__":
     # Create data dir if needed
     loguru.logger.info("Creating data directory if it does not exist")
     try:
@@ -55,43 +79,9 @@ if __name__ == "__main__":
         loguru.logger.error(f"Failed to create data directory: {e}")
         sys.exit(1)
 
-    # Load daily event monitor
-    loguru.logger.info("Loading daily event monitor")
-    dem = daily_event_monitor.DailyEventMonitor(
-        "data/daily_pennsylvanian_headlines.json"
-    )
-
-    # Run scrape
-    loguru.logger.info("Starting scrape")
-    try:
-        data_point = scrape_data_point()
-    except Exception as e:
-        loguru.logger.error(f"Failed to scrape data point: {e}")
-        data_point = None
-
-    # Save data
-    if data_point is not None:
-        dem.add_today(data_point)
-        dem.save()
-        loguru.logger.info("Saved daily event monitor")
-
-    def print_tree(directory, ignore_dirs=[".git", "__pycache__"]):
-        loguru.logger.info(f"Printing tree of files/dirs at {directory}")
-        for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d not in ignore_dirs]
-            level = root.replace(directory, "").count(os.sep)
-            indent = " " * 4 * (level)
-            loguru.logger.info(f"{indent}+--{os.path.basename(root)}/")
-            sub_indent = " " * 4 * (level + 1)
-            for file in files:
-                loguru.logger.info(f"{sub_indent}+--{file}")
-
-    print_tree(os.getcwd())
-
-    loguru.logger.info("Printing contents of data file {}".format(dem.file_path))
-    with open(dem.file_path, "r") as f:
-        loguru.logger.info(f.read())
+    main()
 
     # Finish
     loguru.logger.info("Scrape complete")
     loguru.logger.info("Exiting")
+
