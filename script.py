@@ -2,14 +2,13 @@
 Scrapes a headline from The Daily Pennsylvanian website and saves it to a 
 JSON file that tracks headlines over time.
 """
-
 import os
 import sys
 import json
 from datetime import datetime
-import loguru
 import requests
 import bs4
+import loguru
 
 def scrape_data_point():
     """
@@ -32,22 +31,22 @@ def scrape_data_point():
                 main_section = news_soup.find("div", class_="main section")
                 if main_section:
                     top_headline = main_section.find("h3", class_="standard-link")
-                    top_headline_text = top_headline.find("a").text.strip() if top_headline else ""
-                    loguru.logger.info(f"Top headline: {top_headline_text}")
-                    return top_headline_text
-
+                    if top_headline and top_headline.find("a"):
+                        top_headline_text = top_headline.find("a").text.strip()
+                        loguru.logger.info(f"Top headline: {top_headline_text}")
+                        return top_headline_text
     loguru.logger.info("Failed to locate the News link or headline")
-    return ""
+    return None
 
 def load_data(file_path):
-    try:
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            try:
                 return json.load(file)
-        else:
-            return {}
-    except json.JSONDecodeError:
-        return {}
+            except json.JSONDecodeError:
+                loguru.logger.error("Error decoding JSON from file")
+                return {}
+    return {}
 
 def save_data(file_path, data):
     with open(file_path, 'w') as file:
@@ -55,32 +54,30 @@ def save_data(file_path, data):
 
 def main():
     loguru.logger.add("scrape.log", rotation="1 day")
-
     data_file_path = 'data/daily_pennsylvanian_headlines.json'
     current_data = load_data(data_file_path)
 
     today_date = datetime.now().strftime("%Y-%m-%d")
     data_point = scrape_data_point()
 
-    if today_date in current_data:
-        current_data[today_date].append(data_point)
-    else:
-        current_data[today_date] = [data_point]
+    if data_point:
+        if today_date in current_data:
+            current_data[today_date].append(data_point)
+        else:
+            current_data[today_date] = [data_point]
 
-    save_data(data_file_path, current_data)
-    loguru.logger.info(f"Scraped and saved: {data_point}")
+        save_data(data_file_path, current_data)
+        loguru.logger.info(f"Scraped and saved: {data_point}")
+    else:
+        loguru.logger.info("No new data to save.")
 
 if __name__ == "__main__":
-    # Create data dir if needed
-    loguru.logger.info("Creating data directory if it does not exist")
-    try:
+    if not os.path.exists("data"):
         os.makedirs("data", exist_ok=True)
-    except Exception as e:
-        loguru.logger.error(f"Failed to create data directory: {e}")
-        sys.exit(1)
+        loguru.logger.info("Created data directory")
 
     main()
-
+    
     # Finish
     loguru.logger.info("Scrape complete")
     loguru.logger.info("Exiting")
