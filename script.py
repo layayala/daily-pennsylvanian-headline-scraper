@@ -12,10 +12,9 @@ import bs4
 import requests
 import loguru
 
-
 def scrape_data_point():
     """
-    Scrapes the main headline from The Daily Pennsylvanian home page.
+    Scrapes the top headline from the 'News' section on The Daily Pennsylvanian home page by first navigating to the 'News' subpage and then extracting the headline.
 
     Returns:
         str: The headline text if found, otherwise an empty string.
@@ -26,10 +25,21 @@ def scrape_data_point():
 
     if req.ok:
         soup = bs4.BeautifulSoup(req.text, "html.parser")
-        target_element = soup.find("a", class_="frontpage-link")
-        data_point = "" if target_element is None else target_element.text
-        loguru.logger.info(f"Data point: {data_point}")
-        return data_point
+        news_link = soup.find("a", href=lambda x: x and "section/news" in x)
+        if news_link:
+            news_page = requests.get(news_link['href'])
+            loguru.logger.info(f"News page URL: {news_page.url}")
+            if news_page.ok:
+                news_soup = bs4.BeautifulSoup(news_page.text, "html.parser")
+                main_section = news_soup.find("div", class_="main section")
+                if main_section:
+                    top_headline = main_section.find("h3", class_="standard-link")
+                    top_headline_text = top_headline.find("a").text.strip() if top_headline else ""
+                    loguru.logger.info(f"Top headline: {top_headline_text}")
+                    return top_headline_text
+
+    loguru.logger.info("Failed to locate the News link or headline")
+    return ""
 
 
 if __name__ == "__main__":
